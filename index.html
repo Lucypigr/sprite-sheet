@@ -74,13 +74,21 @@
       </div>
     </details>
 
-    <details open><summary>③ 動畫</summary>
+    <details open><summary>③ 骨架與動畫</summary>
+      <div class="seg" id="c-animmode"><button data-v="rig" class="on">骨架動畫（推薦）</button><button data-v="auto">快速自動</button></div>
+      <div data-show="rig">
+        <label>體型<select id="c-body"></select></label>
+        <label data-body="biped">武器（決定攻擊動作）<select id="c-weapon"></select></label>
+        <label data-body="float">移動方式<select id="c-float"></select></label>
+        <label data-body="biped" data-armed>武器粗細<span class="val" id="c-wwidth-v"></span><input type="range" id="c-wwidth" min="1" max="8" step="0.5" value="2"></label>
+        <p class="hint">在右邊「骨架關節」把圓點拖到角色的關節上，動畫會自動更新。</p>
+      </div>
       <div id="c-anims" class="animlist"></div>
       <div class="row2">
         <label>原圖朝向<select id="c-facing"><option value="right">向右</option><option value="left">向左</option></select></label>
         <label>特效顏色<input type="color" id="c-accent" value="#ffe14d"></label>
       </div>
-      <label>腿部起點（身高 %）<span class="val" id="c-leg-v"></span><input type="range" id="c-leg" min="40" max="85" value="64"></label>
+      <label data-show="auto">腿部起點（身高 %）<span class="val" id="c-leg-v"></span><input type="range" id="c-leg" min="40" max="85" value="64"></label>
       <div class="row2">
         <label>格子寬<input type="number" id="c-cw" placeholder="自動" min="8" max="512"></label>
         <label>格子高<input type="number" id="c-ch" placeholder="自動" min="8" max="512"></label>
@@ -106,6 +114,22 @@
         <div class="srcbox"><div><small>原圖</small><canvas id="c-orig" class="bg-checker"></canvas></div><div><small>像素化</small><canvas id="c-base" class="pix bg-checker"></canvas></div></div>
       </div>
       <div class="status" id="c-status">請上傳圖片或生成角色。</div>
+    </div>
+    <div class="card" id="c-rig-card">
+      <div class="card-h"><h2>骨架關節（拖曳圓點對齊）</h2><div class="tools"><label class="chk"><input type="checkbox" id="c-rig-parts" checked> 部位色塊</label><button class="ghost" id="c-rig-reset">↺ 自動擺放</button></div></div>
+      <div class="rig-layout">
+        <div class="rig-canvas"><canvas id="c-rig" class="pix bg-checker"></canvas></div>
+        <div class="rig-help">
+          <p><b>怎麼擺：</b>把每個圓點拖到角色身上對應的位置，放開滑鼠後動畫會重新產生。</p>
+          <ul>
+            <li><b>前</b>＝靠近鏡頭那一側的手腳；<b>遠</b>或「後」＝被身體擋住的那一側。</li>
+            <li><b>部位色塊</b>顯示每塊像素會跟著哪根骨頭動。顏色分錯，就把關節往那塊像素移近一點。</li>
+            <li>拿武器時，<b>前手</b>放在握把，<b>武器尖</b>拖到武器最末端（劍尖、槍頭、杖頭、弓的上端）。</li>
+            <li>四足：先對好四隻腳掌，再對膝蓋、髖、肩、頭、尾巴。</li>
+          </ul>
+          <div class="legend" id="c-rig-legend"></div>
+        </div>
+      </div>
     </div>
     <div class="card">
       <div class="card-h"><h2>Sprite Sheet</h2><div class="tools"><span class="meta" id="c-meta"></span><label class="zoom">縮放<input type="range" id="c-zoom" min="1" max="8" value="3"></label></div></div>
@@ -214,8 +238,10 @@
       <li><b>上傳圖片</b>：任何角色圖（手繪、AI 圖、3D 截圖都可以），會自動去背 → 裁切 → 縮成指定像素高度 → 套用調色盤 → 加外框。</li>
       <li><b>AI 生成</b>：輸入描述（中英文皆可），透過免費的 Pollinations.ai 生成角色，再自動像素化。</li>
       <li><b>程序生成</b>：完全離線，依描述關鍵字組合出像素小人 / 史萊姆 / 怪物。</li>
-      <li>勾選要的動畫（待機、走路、跑步、攻擊、跳躍、受傷、死亡、施法），調整每個動畫的影格數與 FPS。動畫是以像素級變形（呼吸、雙腿分離擺動、傾斜、擠壓伸展、旋轉、閃白）自動產生的。</li>
-      <li>下載 ZIP：包含 <code>PNG</code>、Godot 4 的 <code>SpriteFrames .tres</code>、Aseprite 相容 <code>.json</code>。</li>
+      <li><b>骨架動畫（推薦）</b>：選擇體型（雙足／四足／無腳飛行）與武器，在「骨架關節」把圓點拖到角色的關節上。角色會被切成頭、身體、手臂、腿、武器等部位，用骨架做出全身協調的動作；手臂和武器會單獨轉動。</li>
+      <li>武器決定攻擊動作：劍＝揮砍（含刀光）、斧＝高舉重劈、長槍＝突刺、弓＝拉弓射箭、法杖＝舉杖施法發射光球、徒手＝出拳。</li>
+      <li>四足動物有對角步伐的走路、奔跑、撲咬；無腳角色可選彈跳（史萊姆）、漂浮（幽靈）或拍翅飛行。</li>
+      <li>下載 ZIP：包含 <code>PNG</code>、Godot 4 的 <code>SpriteFrames .tres</code>、Aseprite 相容 <code>.json</code>；骨架模式另附 <code>Skeleton2D</code> 骨架場景與各部位 PNG，可在 Godot 裡自己做更多動作。</li>
     </ol>
     <h3>VFX 特效</h3>
     <p>16 種程序生成特效（爆炸、火焰、斬擊、魔法陣、閃電、治療、冰刺、傳送門、衝擊波…），可調尺寸、影格、配色、密度，循環特效保證首尾無縫。開啟「2.5D 地面透視」可得到貼地的橢圓魔法陣 / 衝擊波。</p>
@@ -237,6 +263,7 @@
 <script src="js/core.js"></script>
 <script src="js/pixelate.js"></script>
 <script src="js/anim.js"></script>
+<script src="js/rig.js"></script>
 <script src="js/procchar.js"></script>
 <script src="js/vfx.js"></script>
 <script src="js/tiles.js"></script>

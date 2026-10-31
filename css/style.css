@@ -114,3 +114,15 @@ canvas.pix { image-rendering: pixelated; image-rendering: crisp-edges; }
   .top { position: static; }
   #c-preview, #v-preview { width: 200px; height: 200px; }
 }
+
+.rig-layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.rig-canvas { flex: 0 0 auto; max-width: 100%; overflow: auto; }
+#c-rig { display: block; touch-action: none; cursor: grab; border-radius: 8px; max-width: 100%; }
+#c-rig.dragging { cursor: grabbing; }
+.rig-help { flex: 1 1 240px; min-width: 0; font-size: 13px; color: var(--muted); }
+.rig-help b { color: var(--text); }
+.rig-help ul { padding-left: 18px; margin: 6px 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; font-size: 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 4px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.chk { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text); }

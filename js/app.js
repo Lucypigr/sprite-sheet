@@ -64,22 +64,42 @@
   $('c-leg-v').textContent += '%';
   $('c-leg').addEventListener('input', () => { $('c-leg-v').textContent = $('c-leg').value + '%'; });
 
-  const animBox = $('c-anims');
-  animBox.innerHTML = '<div class="animrow animhead"><span>動畫</span><span>影格</span><span>FPS</span></div>' + Object.entries(SG.ANIMS).map(([k, a]) =>
-    `<div class="animrow"><label><input type="checkbox" data-anim="${k}" ${['idle', 'walk', 'attack', 'hurt', 'death'].includes(k) ? 'checked' : ''}> ${a.label}</label><input type="number" min="2" max="16" value="${a.frames}" data-frames="${k}"><input type="number" min="1" max="60" value="${a.fps}" data-fps="${k}"></div>`).join('');
+  // ---------- 骨架設定 ----------
+  fillSelect('c-body', SG.BODY_TYPES, 'biped', (v) => v); fillSelect('c-weapon', SG.WEAPONS, 'sword', (v) => v); fillSelect('c-float', SG.FLOAT_MODES, 'bounce', (v) => v);
+  bindVal('c-wwidth');
+  const animMode = segmented('c-animmode', () => { syncRigUi(); renderAnimList(); processChar(); });
+  const rigOpts = () => ({ type: $('c-body').value, weapon: $('c-body').value === 'biped' ? $('c-weapon').value : 'none', floatMode: $('c-float').value, facing: $('c-facing').value });
+  function syncRigUi() {
+    const rig = animMode() === 'rig', o = rigOpts();
+    document.querySelectorAll('[data-body]').forEach((n) => (n.style.display = n.dataset.body === o.type ? '' : 'none'));
+    document.querySelectorAll('[data-armed]').forEach((n) => { if (o.type === 'biped') n.style.display = o.weapon !== 'none' ? '' : 'none'; });
+    $('c-rig-card').style.display = rig ? '' : 'none';
+  }
+  const animBox = $('c-anims'); const animChecked = {};
+  function renderAnimList() {
+    const rig = animMode() === 'rig'; const defs = rig ? SG.rigAnims($('c-body').value, rigOpts()) : SG.ANIMS;
+    const dflt = rig ? Object.keys(defs).filter((k) => k !== 'cast') : ['idle', 'walk', 'attack', 'hurt', 'death'];
+    animBox.innerHTML = '<div class="animrow animhead"><span>動畫</span><span>影格</span><span>FPS</span></div>' + Object.entries(defs).map(([k, a]) => {
+      const on = animChecked[k] != null ? animChecked[k] : dflt.includes(k);
+      return `<div class="animrow"><label><input type="checkbox" data-anim="${k}" ${on ? 'checked' : ''}> ${a.label}</label><input type="number" min="2" max="16" value="${a.frames}" data-frames="${k}"><input type="number" min="1" max="60" value="${a.fps}" data-fps="${k}"></div>`;
+    }).join('');
+  }
+  animBox.addEventListener('change', (e) => { if (e.target.dataset.anim) animChecked[e.target.dataset.anim] = e.target.checked; });
+  ['c-body', 'c-weapon', 'c-float'].forEach((id) => $(id).addEventListener('change', () => { syncRigUi(); renderAnimList(); processChar(); }));
+  syncRigUi(); renderAnimList();
 
   const srcMode = segmented('c-src');
   const syncPal = () => { document.querySelectorAll('[data-pal]').forEach((n) => (n.style.display = $('c-pal').value === n.dataset.pal ? '' : 'none')); };
   $('c-pal').addEventListener('change', syncPal); syncPal();
 
   function setSource(img, pixel, label) {
-    ch.src = { img, pixel };
+    ch.src = { img, pixel }; ch.joints = {};
     const oc = $('c-orig'); SG.toCanvas(img, 1, oc); oc.classList.toggle('pix', !!pixel);
     processChar(); status('c-status', label);
   }
   function loadFile(file) {
     if (!file || !file.type.startsWith('image/')) return toast('請選擇圖片檔');
-    const img = new Image(); img.onload = () => { const im = SG.fromCanvasSource(img, 1024); setSource(im, false, `已載入：${file.name}（${img.naturalWidth}×${img.naturalHeight}）`); if ($('c-name').value === 'hero') $('c-name').value = SG.safeName(file.name.replace(/\.\w+$/, '')); URL.revokeObjectURL(img.src); };
+    const img = new Image(); img.onload = () => { const im = SG.fromCanvasSource(img, 1024); const isPixel = Math.max(img.naturalWidth, img.naturalHeight) <= 160; setSource(im, isPixel, `已載入：${file.name}（${img.naturalWidth}×${img.naturalHeight}）${isPixel ? '。偵測到小尺寸像素圖，直接使用原始像素（不再縮放）。' : ''}`); if ($('c-name').value === 'hero') $('c-name').value = SG.safeName(file.name.replace(/\.\w+$/, '')); URL.revokeObjectURL(img.src); };
     img.onerror = () => toast('無法讀取這張圖片'); img.src = URL.createObjectURL(file);
   }
   $('c-file').addEventListener('change', (e) => loadFile(e.target.files[0]));
@@ -138,11 +158,20 @@
       const frames = {}, fps = {};
       document.querySelectorAll('[data-frames]').forEach((n) => (frames[n.dataset.frames] = Math.max(2, Math.min(16, Number(n.value) || 2))));
       document.querySelectorAll('[data-fps]').forEach((n) => (fps[n.dataset.fps] = Math.max(1, Number(n.value) || 8)));
-      ch.pack = SG.buildCharacterSheet(im, {
-        anims, frames, fps, facing: $('c-facing').value, mirror: $('c-mirror').checked, legStart: num('c-leg') / 100,
-        accent: SG.hex($('c-accent').value), outline: $('c-outline').value, outlineColor: oc,
-        cellW: num('c-cw') || 0, cellH: num('c-ch') || 0,
-      });
+      if (animMode() === 'rig') {
+        const o = rigOpts(); const J = ensureJoints(im, o);
+        ch.pack = SG.buildRigSheet(im, Object.assign({}, o, {
+          joints: J, anims, frames, fps, mirror: $('c-mirror').checked, accent: SG.hex($('c-accent').value), outline: $('c-outline').value, outlineColor: oc,
+          weaponWidth: num('c-wwidth'), cellW: num('c-cw') || 0, cellH: num('c-ch') || 0,
+        }));
+        drawRig();
+      } else {
+        ch.pack = SG.buildCharacterSheet(im, {
+          anims, frames, fps, facing: $('c-facing').value, mirror: $('c-mirror').checked, legStart: num('c-leg') / 100,
+          accent: SG.hex($('c-accent').value), outline: $('c-outline').value, outlineColor: oc,
+          cellW: num('c-cw') || 0, cellH: num('c-ch') || 0,
+        });
+      }
       if (ch.pack.cw && (!num('c-cw') || !num('c-ch'))) { $('c-cw').placeholder = '自動 ' + ch.pack.cw; $('c-ch').placeholder = '自動 ' + ch.pack.ch; }
       const sel = $('c-play-anim'); sel.innerHTML = ch.pack.rows.map((r, i) => `<option value="${i}">${r.name}</option>`).join('');
       sel.value = String(Math.max(0, [...sel.options].findIndex((o) => o.textContent === ch.lastAnim)));
@@ -154,7 +183,70 @@
   $('c-play-anim').addEventListener('change', (e) => { ch.player.row = Number(e.target.value); ch.player.i = 0; ch.lastAnim = e.target.selectedOptions[0].textContent; });
   $('c-play').onclick = () => { ch.player.playing = !ch.player.playing; $('c-play').textContent = ch.player.playing ? '⏸' : '▶'; };
   const reproc = debounce(processChar, 120);
-  document.querySelectorAll('#tab-char .side input, #tab-char .side select').forEach((el) => { if (['c-file', 'c-desc', 'c-seed', 'c-style', 'c-view', 'c-name', 'c-scale', 'ai-key'].includes(el.id)) return; el.addEventListener('input', reproc); el.addEventListener('change', reproc); });
+  document.querySelectorAll('#tab-char .side input, #tab-char .side select').forEach((el) => { if (['c-file', 'c-desc', 'c-seed', 'c-style', 'c-view', 'c-name', 'c-scale', 'ai-key', 'c-body', 'c-weapon', 'c-float'].includes(el.id) || el.closest('#c-anims')) return; el.addEventListener('input', reproc); el.addEventListener('change', reproc); });
+  animBox.addEventListener('input', reproc); animBox.addEventListener('change', reproc);
+  $('c-facing').addEventListener('change', () => { ch.joints = {}; });
+
+  // ---------- 骨架關節編輯器 ----------
+  const BONE_NAMES = { torso: '身體', head: '頭', uaF: '前上臂', faF: '前前臂', uaB: '遠上臂', faB: '遠前臂', thF: '前大腿', shF: '前小腿', thB: '遠大腿', shB: '遠小腿', weapon: '武器',
+    body: '身體', neck: '頭頸', tail: '尾巴', uFF: '前腿上', lFF: '前腿下', uFB: '前腿上(遠)', lFB: '前腿下(遠)', uRF: '後腿上', lRF: '後腿下', uRB: '後腿上(遠)', lRB: '後腿下(遠)', wingF: '翅膀', wingB: '翅膀(遠)' };
+  const PART_COLORS = ['#ff5d73', '#4cc9f0', '#ffd166', '#7bd88f', '#c77dff', '#ff9f68', '#56e3c8', '#f8f8f2', '#a1c45a', '#5d8bff', '#ff7ab6', '#e4e86c'];
+  const jointKey = (o) => o.type === 'float' ? 'float_' + o.floatMode : o.type;
+  function ensureJoints(im, o) {
+    const key = jointKey(o); ch.joints = ch.joints || {};
+    let J = ch.joints[key];
+    if (!J) J = ch.joints[key] = SG.autoJoints(im, o.type, o);
+    const def = SG.rigDef(o.type, o);
+    const missing = Object.keys(def.defaults).filter((k) => !J[k]);
+    if (missing.length) { const A = SG.autoJoints(im, o.type, o); missing.forEach((k) => (J[k] = A[k])); }
+    return J;
+  }
+  $('c-rig-reset').onclick = () => { if (!ch.base) return; const o = rigOpts(); ch.joints[jointKey(o)] = SG.autoJoints(ch.base, o.type, o); processChar(); };
+  $('c-rig-parts').addEventListener('change', () => drawRig());
+  const rigCv = $('c-rig'); let rigK = 4, drag = null;
+  function drawRig() {
+    if (!ch.base || animMode() !== 'rig') return;
+    const B = ch.base, o = rigOpts(), def = SG.rigDef(o.type, o), Jn = ensureJoints(B, o);
+    const J = {}; for (const k in def.defaults) J[k] = [Jn[k][0] * B.w, Jn[k][1] * B.h];
+    const seg = SG.segmentRig(B, def, J, { weaponWidth: num('c-wwidth') });
+    const pad = 24; rigK = Math.max(2, Math.floor(Math.min(440 / B.w, 420 / B.h)));
+    const W = B.w * rigK + pad * 2, H = B.h * rigK + pad * 2;
+    if (rigCv.width !== W || rigCv.height !== H) { rigCv.width = W; rigCv.height = H; }
+    const x = rigCv.getContext('2d'); x.clearRect(0, 0, W, H); x.imageSmoothingEnabled = false;
+    const parts = $('c-rig-parts').checked;
+    x.globalAlpha = parts ? 0.55 : 1; x.drawImage(SG.toCanvas(B, 1), pad, pad, B.w * rigK, B.h * rigK); x.globalAlpha = 1;
+    if (parts) {
+      x.globalAlpha = 0.6;
+      for (let p = 0; p < B.w * B.h; p++) { const ow = seg.owner[p]; if (ow < 0) continue; x.fillStyle = PART_COLORS[ow % PART_COLORS.length]; x.fillRect(pad + (p % B.w) * rigK, pad + Math.floor(p / B.w) * rigK, rigK, rigK); }
+      x.globalAlpha = 1;
+    }
+    const P = (j) => [pad + J[j][0] * rigK, pad + J[j][1] * rigK];
+    x.lineCap = 'round';
+    for (const b of def.bones) { const a = P(b.a), c = P(b.b); x.strokeStyle = 'rgba(0,0,0,.6)'; x.lineWidth = 5; x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(c[0], c[1]); x.stroke(); x.strokeStyle = b.weapon ? '#ff5d73' : b.back ? '#8ecbff' : '#fff'; x.lineWidth = 2; x.beginPath(); x.moveTo(a[0], a[1]); x.lineTo(c[0], c[1]); x.stroke(); }
+    x.font = '11px "Noto Sans TC", sans-serif'; x.textBaseline = 'middle';
+    for (const k in def.defaults) {
+      const [px, py] = P(k); const back = /B$|FB$|RB$/.test(k) && k !== 'neck'; const col = k === 'tip' ? '#ff5d73' : back ? '#4cc9f0' : /F$|FF$|RF$/.test(k) ? '#ffcc4d' : '#ffffff';
+      x.fillStyle = col; x.strokeStyle = '#12111c'; x.lineWidth = 2; x.beginPath(); x.arc(px, py, drag && drag.k === k ? 8 : 6, 0, Math.PI * 2); x.fill(); x.stroke();
+      const lb = SG.JOINT_LABEL[k] || k; const lx = back ? px - 9 : px + 9; x.textAlign = back ? 'right' : 'left';
+      x.lineWidth = 3; x.strokeText(lb, lx, py); x.fillStyle = '#fff'; x.fillText(lb, lx, py); x.textAlign = 'left';
+    }
+    rigCv.dataset.pad = pad;
+    $('c-rig-legend').innerHTML = parts ? def.bones.map((b, i) => `<span><i style="background:${PART_COLORS[i % PART_COLORS.length]}"></i>${BONE_NAMES[b.n] || b.n}</span>`).join('') : '';
+  }
+  const rigPos = (e) => { const r = rigCv.getBoundingClientRect(); const s = rigCv.width / r.width; return [(e.clientX - r.left) * s, (e.clientY - r.top) * s]; };
+  rigCv.addEventListener('pointerdown', (e) => {
+    if (!ch.base) return; const o = rigOpts(), def = SG.rigDef(o.type, o), Jn = ensureJoints(ch.base, o); const pad = Number(rigCv.dataset.pad || 24);
+    const [mx, my] = rigPos(e); let best = null, bd = 18;
+    for (const k in def.defaults) { const d = Math.hypot(pad + Jn[k][0] * ch.base.w * rigK - mx, pad + Jn[k][1] * ch.base.h * rigK - my); if (d < bd) { bd = d; best = k; } }
+    if (!best) return; drag = { k: best }; rigCv.setPointerCapture(e.pointerId); rigCv.classList.add('dragging'); e.preventDefault(); drawRig();
+  });
+  rigCv.addEventListener('pointermove', (e) => {
+    if (!drag) return; const o = rigOpts(), Jn = ensureJoints(ch.base, o); const pad = Number(rigCv.dataset.pad || 24); const [mx, my] = rigPos(e);
+    Jn[drag.k] = [Math.max(-0.1, Math.min(1.1, (mx - pad) / (ch.base.w * rigK))), Math.max(-0.1, Math.min(1.1, (my - pad) / (ch.base.h * rigK)))];
+    drawRig();
+  });
+  const endDrag = () => { if (!drag) return; drag = null; rigCv.classList.remove('dragging'); processChar(); };
+  rigCv.addEventListener('pointerup', endDrag); rigCv.addEventListener('pointercancel', endDrag);
 
   function drawSheet(p) {
     const pack = p === 'c' ? ch.pack : vfx.pack; if (!pack) return;
@@ -173,7 +265,9 @@
     if (what === 'png') return SG.download(blob, png);
     if (what === 'tres') return SG.download(new Blob([tres], { type: 'text/plain' }), base + '.tres');
     if (what === 'json') return SG.download(new Blob([json], { type: 'application/json' }), base + '.json');
-    const zip = await SG.zip([{ name: png, data: blob }, { name: base + '.tres', data: tres }, { name: base + '.json', data: json }, { name: 'README_Godot.txt', data: SG.GODOT_README(kind, base) }]);
+    const files = [{ name: png, data: blob }, { name: base + '.tres', data: tres }, { name: base + '.json', data: json }, { name: 'README_Godot.txt', data: SG.GODOT_README(kind, base) + (pack.rig ? SG.RIG_README(base) : '') }];
+    if (pack.rig) files.push(...(await SG.rigGodotFiles(ch.base, pack.rig, base)));
+    const zip = await SG.zip(files);
     SG.download(zip, base + '.zip'); toast('已下載 ' + base + '.zip');
   }
   const cExp = (w) => () => exportPack(ch.pack, $('c-name').value, num('c-scale'), w, 'sprite');

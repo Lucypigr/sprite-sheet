@@ -84,6 +84,12 @@
     return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/zip' });
   };
 
+  SG.RIG_README = (base) => `
+骨架場景（進階）
+----------------
+${base}_rig/${base}_rig.tscn 是 Skeleton2D 骨架場景，每個部位是一張獨立 PNG，綁在對應的 Bone2D 上。
+想自己做更多動作：把場景拖進遊戲場景，加一個 AnimationPlayer，對各個 Bone2D 的 rotation 打關鍵影格即可。
+`;
   SG.GODOT_README = (kind, base) => `Pixel Forge 匯出檔 —— Godot 4 使用說明
 =========================================
 
