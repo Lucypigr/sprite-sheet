@@ -13,98 +13,134 @@
     cast: { label: '施法 cast', frames: 6, fps: 10, loop: true },
   };
 
-  // 每個動畫的關鍵參數
-  function keyParams(name, i, n, h, f) {
-    const p = { dx: 0, dy: 0, sx: 1, sy: 1, shear: 0, rot: 0, breathe: 0, L: [0, 0], R: [0, 0], front: 'R', flash: 0, tint: null, fade: 0, fx: null };
-    const A = Math.max(1, Math.round(h / 24)); // 動作幅度隨尺寸縮放
-    const ph = (i / n) * Math.PI * 2;
+  // ---------- 簡易骨架：頭 / 軀幹 / 雙腿，各自旋轉位移，關節處平滑銜接 ----------
+  // 姿勢參數（角度單位：弧度；正值＝朝面向方向）
+  function pose(o) {
+    return Object.assign({ dx: 0, dy: 0, sx: 1, sy: 1, rot: 0, torso: 0, tsy: 1, hx: 0, hy: 0,
+      L: { a: 0, lift: 0 }, R: { a: 0, lift: 0 }, front: 'R', flash: 0, tint: null, glow: 0, fx: null, ghost: null }, o);
+  }
+  const lerp = (a, b, t) => a + (b - a) * t;
+  // 在關鍵影格之間插值
+  function keyframes(keys, t) {
+    const n = keys.length - 1; const x = Math.max(0, Math.min(1, t)) * n; const i = Math.min(n - 1, Math.floor(x)); const k = x - i;
+    const A = pose(keys[i]), B = pose(keys[i + 1]); const o = pose({});
+    for (const f of ['dx', 'dy', 'sx', 'sy', 'rot', 'torso', 'tsy', 'hx', 'hy', 'glow']) o[f] = lerp(A[f], B[f], k);
+    o.L = { a: lerp(A.L.a, B.L.a, k), lift: lerp(A.L.lift, B.L.lift, k) }; o.R = { a: lerp(A.R.a, B.R.a, k), lift: lerp(A.R.lift, B.R.lift, k) };
+    const near = k < 0.5 ? A : B; o.front = near.front; o.flash = near.flash; o.tint = near.tint; o.fx = near.fx; o.ghost = near.ghost;
+    return o;
+  }
+
+  function keyParams(name, i, n, h) {
+    const A = Math.max(1, h / 24); // 位移幅度隨角色尺寸縮放（像素）
+    const t = n > 1 ? i / (n - 1) : 0, ph = (i / n) * Math.PI * 2;
     switch (name) {
       case 'idle': {
-        const b = [0, 0, 1, 1, 1, 0, 0, 0];
-        p.breathe = b[Math.floor((i / n) * 8)] * A; break;
+        const s = Math.sin(ph);
+        return pose({ tsy: 1 - 0.035 * (s * 0.5 + 0.5), hy: Math.round((s * 0.5 + 0.5) * A * 0.9), torso: 0.02 * Math.sin(ph + 0.8), dy: 0 });
       }
       case 'walk': case 'run': {
-        const run = name === 'run'; const s = Math.sin(ph);
-        const stride = (run ? 3 : 2) * A, lift = (run ? 2.5 : 1.5) * A;
-        p.L = [s * stride * f, Math.max(0, s) * lift];
-        p.R = [-s * stride * f, Math.max(0, -s) * lift];
-        p.front = s > 0 ? 'L' : 'R';
-        p.dy = -Math.round(Math.abs(Math.sin(ph)) * (run ? 1.5 : 0.8) * A) + (run ? 0 : 0);
-        p.breathe = Math.abs(Math.cos(ph)) > 0.7 ? A * (run ? 1 : 0) : 0;
-        if (run) p.shear = 0.14 * f;
-        break;
+        const run = name === 'run'; const s = Math.sin(ph), c = Math.cos(ph);
+        const legA = run ? 0.62 : 0.42, lift = (run ? 0.3 : 0.18) * h * 0.36;
+        const bob = (run ? 1.6 : 1) * A;
+        return pose({
+          L: { a: s * legA, lift: Math.max(0, c) * lift }, R: { a: -s * legA, lift: Math.max(0, -c) * lift },
+          front: s > 0 ? 'L' : 'R',
+          dy: -Math.round(Math.abs(c) * bob),                         // 經過中間姿勢時身體最高
+          torso: (run ? 0.2 : 0.06) + 0.04 * Math.sin(ph * 2),        // 前傾 + 隨步伐微晃
+          hy: Math.round(Math.max(0, Math.sin(ph * 2 - 1.2)) * A * 0.8), // 頭部延遲（跟隨）
+          sy: run ? 1 - 0.05 * Math.abs(s) : 1, sx: run ? 1 + 0.04 * Math.abs(s) : 1,
+        });
       }
       case 'attack': {
-        const k = [[-0.12, -1, 0], [-0.2, -2, 0], [0.22, 2, 1], [0.28, 3, 2], [0.14, 2, 3], [0.04, 1, 0], [0, 0, 0]];
-        const q = k[Math.min(k.length - 1, Math.round((i / Math.max(1, n - 1)) * (k.length - 1)))];
-        p.shear = q[0] * f; p.dx = q[1] * A * f; p.fx = q[2] ? { type: 'slash', stage: q[2] } : null;
-        if (q[2] === 1) { p.sx = 1.12; p.sy = 0.95; }
-        break;
+        const keys = [
+          {}, // 預備
+          { torso: -0.28, dx: -2 * A, sy: 0.92, sx: 1.04, hx: -A, L: { a: -0.25, lift: 0 }, R: { a: 0.15, lift: 0 } }, // 蓄力：下蹲後仰
+          { torso: 0.42, dx: 4 * A, sx: 1.16, sy: 0.96, hx: A, L: { a: -0.45, lift: 0 }, R: { a: 0.45, lift: 0 }, fx: { type: 'slash', stage: 1 }, ghost: 1 }, // 揮擊：拖影
+          { torso: 0.36, dx: 4.5 * A, L: { a: -0.42, lift: 0 }, R: { a: 0.42, lift: 0 }, hx: A * 1.5, fx: { type: 'slash', stage: 2 } }, // 跟隨
+          { torso: 0.2, dx: 3.5 * A, L: { a: -0.3, lift: 0 }, R: { a: 0.3, lift: 0 }, hx: A, fx: { type: 'slash', stage: 3 } },
+          { torso: 0.05, dx: 1 * A, L: { a: -0.1, lift: 0 }, R: { a: 0.1, lift: 0 } }, // 收招
+          {},
+        ];
+        const p = keyframes(keys, t);
+        if (p.ghost) p.ghostPose = pose(keys[1]);
+        return p;
       }
-      case 'jump': {
-        const k = [[1.15, 0.85, 0], [0.9, 1.12, -0.12], [0.95, 1.06, -0.3], [1, 1, -0.36], [0.96, 1.05, -0.22], [1.18, 0.84, 0], [1, 1, 0]];
-        const q = k[Math.min(k.length - 1, Math.round((i / Math.max(1, n - 1)) * (k.length - 1)))];
-        p.sx = q[0]; p.sy = q[1]; p.dy = Math.round(q[2] * h);
-        if (q[2] < -0.25) { p.L = [0, A]; p.R = [0, A]; }
-        break;
-      }
-      case 'hurt': {
-        const k = [[-2, 1, null], [-3, 0, [230, 40, 60]], [-1, 0, null]];
-        const q = k[Math.min(k.length - 1, Math.floor((i / n) * k.length))];
-        p.dx = q[0] * A * f; p.flash = q[1]; p.tint = q[2]; p.shear = -0.1 * f; break;
-      }
+      case 'jump': return keyframes([
+        { sy: 0.84, sx: 1.12, torso: 0.15, L: { a: 0.2, lift: 0 }, R: { a: -0.2, lift: 0 } },           // 下蹲
+        { sy: 1.14, sx: 0.9, dy: -0.12 * h, torso: -0.05 },                                               // 起跳伸展
+        { dy: -0.32 * h, L: { a: 0.35, lift: 0.35 * h * 0.36 }, R: { a: -0.1, lift: 0.15 * h * 0.36 }, torso: 0.08, hy: A }, // 收腿
+        { dy: -0.36 * h, L: { a: 0.25, lift: 0.3 * h * 0.36 }, R: { a: 0, lift: 0.2 * h * 0.36 } },     // 最高點
+        { dy: -0.18 * h, sy: 1.06, sx: 0.95, L: { a: 0.1, lift: 0 }, R: { a: -0.15, lift: 0 }, hy: -A },  // 下落
+        { sy: 0.82, sx: 1.16, torso: 0.18, hy: A, L: { a: 0.22, lift: 0 }, R: { a: -0.22, lift: 0 } },   // 落地緩衝
+        {},
+      ], t);
+      case 'hurt': return keyframes([
+        { dx: -2 * A, torso: -0.3, hx: -A, hy: -A, flash: 1, L: { a: 0.15, lift: 0 }, R: { a: 0.1, lift: 0 } },
+        { dx: -3 * A, torso: -0.2, hx: -A, tint: [230, 40, 60], L: { a: 0.1, lift: 0 }, R: { a: 0.05, lift: 0 } },
+        { dx: -1 * A, torso: -0.05 },
+      ], i / Math.max(1, n - 1));
       case 'death': {
-        const t = i / Math.max(1, n - 1);
-        const ang = [0, 12, 30, 55, 80, 90, 90, 90]; const a = ang[Math.round(t * (ang.length - 1))];
-        p.rot = (-a * Math.PI / 180) * f; p.dx = -Math.round(t * 3 * A) * f;
-        if (i === 0) { p.flash = 1; }
-        if (a >= 80 && t < 0.9) p.dy = -A; // 小反彈
-        break;
+        const p = keyframes([
+          { flash: 1, torso: -0.2, hy: -A },
+          { torso: 0.3, sy: 0.9, hy: A, L: { a: 0.3, lift: 0.1 * h }, R: { a: 0.2, lift: 0.1 * h } },  // 膝蓋一軟
+          { rot: -0.5, torso: 0.1, dx: -A, sy: 0.92 },
+          { rot: -1.2, dx: -2 * A, torso: -0.1 },
+          { rot: -1.57, dx: -3 * A, dy: -A },                                                            // 倒地小反彈
+          { rot: -1.57, dx: -3 * A },
+        ], t);
+        return p;
       }
       case 'cast': {
         const s = Math.sin(ph);
-        p.dy = -Math.round((s * 0.5 + 0.5) * A); p.breathe = s > 0 ? 0 : A;
-        p.fx = { type: 'aura', t: i / n }; p.glow = 0.12 + 0.12 * (s * 0.5 + 0.5);
-        break;
+        return pose({ torso: -0.12 - 0.05 * s, dy: -Math.round((s * 0.5 + 0.5) * A), hy: -Math.round(Math.max(0, s) * A * 0.8), tsy: 1 + 0.03 * s,
+          L: { a: 0.08, lift: 0 }, R: { a: -0.08, lift: 0 }, fx: { type: 'aura', t: i / n }, glow: 0.12 + 0.12 * (s * 0.5 + 0.5) });
       }
     }
-    return p;
+    return pose({});
   }
 
-  // 依參數把底圖畫到一格
-  function renderFrame(B, cw, ch, opt, p) {
+  const smooth = (x) => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
+  const rot = (x, y, a) => { const c = Math.cos(a), s = Math.sin(a); return [x * c - y * s, x * s + y * c]; };
+
+  // 依姿勢把底圖畫到一格（反向映射，每個輸出像素回推來源像素）
+  function renderFrame(B, cw, ch, opt, p, f) {
     const { w, h } = B; const out = SG.img(cw, ch);
     const ox = Math.floor((cw - w) / 2), oy = ch - h - opt.margin;
-    const hip = Math.round(h * opt.legStart), chest = Math.round(h * Math.min(opt.legStart, 0.55));
-    const legCx = opt.legCx; const px = w / 2, py = h;
-    const cos = Math.cos(-p.rot), sin = Math.sin(-p.rot);
+    const hip = Math.round(h * opt.legStart), neck = Math.round(h * opt.neck);
+    const px = opt.legCx, py = hip; const legLen = h - hip; const bend = Math.max(2, h * 0.14);
+    const dx = Math.round(p.dx * f), dy = Math.round(p.dy);
     const get = (u, v) => {
       const x = Math.floor(u), y = Math.floor(v);
       if (x < 0 || y < 0 || x >= w || y >= h) return -1;
       const i = (y * w + x) * 4; return B.d[i + 3] ? i : -1;
     };
+    const order = p.front === 'L' ? ['R', 'T', 'L'] : ['L', 'T', 'R']; // 後腿 → 軀幹 → 前腿
     for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
-      let u = x + 0.5 - ox - p.dx, v = y + 0.5 - oy - p.dy;
-      if (p.rot) { const du = u - px, dv = v - py; u = px + du * cos - dv * sin; v = py + du * sin + dv * cos; }
-      u = (u - px) / p.sx + px; v = (v - py) / p.sy + py;
-      u -= p.shear * (h - v);
-      let src = -1;
-      if (v >= hip && (p.L[0] || p.L[1] || p.R[0] || p.R[1])) {
-        const cand = [];
-        // 腿以髖關節為支點擺動：越靠近腳，水平位移越大；抬腿時整條腿等比縮短（保留腳的形狀）
-        const legLen = h - hip;
-        const leg = (P) => {
-          const lift = Math.min(P[1], legLen * 0.6); const sv = hip + (v - hip) * legLen / (legLen - lift);
-          const k = Math.min(1, (sv - hip) / legLen); return [u - P[0] * k, sv];
-        };
-        const lp = leg(p.L), rp = leg(p.R);
-        const l = get(lp[0], lp[1]); if (l >= 0 && ((l / 4) % w) < legCx) cand.push(['L', l]);
-        const r = get(rp[0], rp[1]); if (r >= 0 && ((r / 4) % w) >= legCx) cand.push(['R', r]);
-        if (cand.length === 2) src = (cand[0][0] === p.front ? cand[0] : cand[1])[1];
-        else if (cand.length) src = cand[0][1];
-      } else if (v < chest && p.breathe) {
-        src = get(u, v - p.breathe);
-      } else src = get(u, v);
+      let u = x + 0.5 - ox - dx, v = y + 0.5 - oy - dy;
+      if (p.rot) { const r = rot(u - w / 2, v - h, -p.rot * f); u = w / 2 + r[0]; v = h + r[1]; }
+      u = (u - w / 2) / p.sx + w / 2; v = (v - h) / p.sy + h;
+      const got = {};
+      // 軀幹（含頭）：繞髖關節旋轉，越遠離關節旋轉越完整
+      {
+        let du = u - px, dv = v - py; const rr = Math.hypot(du, dv);
+        [du, dv] = rot(du, dv, -p.torso * f * smooth(rr / bend));
+        dv = dv / p.tsy;
+        let tu = px + du, tv = py + dv;
+        if (tv < neck + 2) { const k = smooth((neck + 2 - tv) / 3); tu -= p.hx * f * k; tv -= p.hy * k; }
+        const i = get(tu, tv);
+        if (i >= 0) { const sx = (i / 4) % w; if (tv < hip || sx < opt.legX0 || sx >= opt.legX1) got.T = i; }
+      }
+      // 雙腿：繞髖關節擺動，抬腿時等比縮短
+      for (const side of ['L', 'R']) {
+        const P = p[side]; let du = u - px, dv = v - py; const rr = Math.hypot(du, dv);
+        [du, dv] = rot(du, dv, P.a * f * smooth(rr / bend));
+        const lift = Math.min(P.lift, legLen * 0.6); const sv = py + dv * legLen / Math.max(1, legLen - lift);
+        if (sv < hip) continue;
+        const i = get(px + du, sv); if (i < 0) continue;
+        const sx = (i / 4) % w; if (sx < opt.legX0 || sx >= opt.legX1) continue;
+        if ((side === 'L') === (sx < opt.legCx)) got[side] = i;
+      }
+      let src = -1; for (const k of order) if (got[k] !== undefined) src = got[k];
       if (src < 0) continue;
       const o = (y * cw + x) * 4;
       let c = [B.d[src], B.d[src + 1], B.d[src + 2]];
@@ -113,7 +149,15 @@
       else if (p.glow) c = SG.mix(c, opt.accent, p.glow);
       out.d[o] = c[0]; out.d[o + 1] = c[1]; out.d[o + 2] = c[2]; out.d[o + 3] = 255;
     }
-    return { img: out, ox: ox + p.dx, oy: oy + p.dy };
+    return { img: out, ox: ox + dx, oy: oy + dy, torso: p.torso * f };
+  }
+
+  // 殘影：用特效色的棋盤格畫出上一個姿勢的剪影
+  function addGhost(im, ghost, color) {
+    for (let y = 0; y < im.h; y++) for (let x = 0; x < im.w; x++) {
+      const i = (y * im.w + x) * 4; if (im.d[i + 3] || !ghost.d[i + 3] || (x + y) % 2) continue;
+      im.d[i] = color[0]; im.d[i + 1] = color[1]; im.d[i + 2] = color[2]; im.d[i + 3] = 255;
+    }
   }
 
   function put(im, x, y, c) {
@@ -125,9 +169,9 @@
   function drawFx(im, B, fr, p, opt, f, i, n) {
     if (!p.fx) return;
     const acc = opt.accent; const light = SG.shade(acc, 0.6);
-    const cx = fr.ox + B.w / 2, cy = fr.oy + B.h * 0.5;
+    const cx = fr.ox + B.w / 2 + (fr.torso || 0) * B.h * 0.3, cy = fr.oy + B.h * 0.5;
     if (p.fx.type === 'slash') {
-      const R = B.h * 0.62; const st = p.fx.stage;
+      const R = B.h * 0.7; const st = p.fx.stage;
       const a0 = -100 * Math.PI / 180, span = 200 * Math.PI / 180;
       const head = st === 1 ? 0.45 : st === 2 ? 1 : 1, tail = st === 1 ? 0 : st === 2 ? 0.2 : 0.75;
       for (let y = 0; y < im.h; y++) for (let x = 0; x < im.w; x++) {
@@ -154,14 +198,18 @@
     let sx = 0, cnt = 0; const hip = Math.round(B.h * cfg.legStart);
     for (let y = hip; y < B.h; y++) for (let x = 0; x < B.w; x++) if (B.d[(y * B.w + x) * 4 + 3]) { sx += x + 0.5; cnt++; }
     const legCx = cnt ? sx / cnt : B.w / 2;
+    // 腿部欄位範圍：以腳底附近幾列的像素決定，手、盾牌、披風下緣不會被當成腿
+    let lx0 = B.w, lx1 = -1; const footRows = Math.max(2, Math.round(B.h * 0.12));
+    for (let y = B.h - footRows; y < B.h; y++) for (let x = 0; x < B.w; x++) if (B.d[(y * B.w + x) * 4 + 3]) { lx0 = Math.min(lx0, x); lx1 = Math.max(lx1, x); }
+    if (lx1 < 0) { lx0 = 0; lx1 = B.w - 1; }
     const margin = 1;
     let cw = cfg.cellW, ch = cfg.cellH;
     if (!cw || !ch) {
-      const need = Math.max(B.w + 8, cfg.anims.includes('death') ? B.h + 6 : 0, cfg.anims.includes('attack') ? B.w + B.h * 0.7 : 0);
+      const need = Math.max(B.w + 8, cfg.anims.includes('death') ? B.h + 6 : 0, cfg.anims.includes('attack') ? B.w + B.h * 1.2 + 8 : 0);
       const s = Math.ceil(Math.max(need, B.h * 1.3 + 2) / 8) * 8;
       cw = ch = s;
     }
-    const opt = { margin, legStart: cfg.legStart, legCx, accent: cfg.accent };
+    const opt = { margin, legStart: cfg.legStart, legCx, legX0: lx0 - 0.5, legX1: lx1 + 1.5, accent: cfg.accent, neck: cfg.legStart * 0.45 };
     const outlineColor = cfg.outlineColor;
     const rows = [];
     const dirs = cfg.mirror ? [['right', 1], ['left', -1]] : [[null, 1]];
@@ -169,9 +217,10 @@
       for (const name of cfg.anims) {
         const def = SG.ANIMS[name]; const n = cfg.frames[name] || def.frames; const frames = [];
         for (let i = 0; i < n; i++) {
-          const p = keyParams(name, i, n, B.h, f);
-          const fr = renderFrame(B, cw, ch, opt, p);
+          const p = keyParams(name, i, n, B.h);
+          const fr = renderFrame(B, cw, ch, opt, p, f);
           let im = SG.outline(fr.img, cfg.outline, outlineColor, false);
+          if (p.ghostPose) addGhost(im, renderFrame(B, cw, ch, opt, p.ghostPose, f).img, SG.shade(cfg.accent, -0.15));
           drawFx(im, B, fr, p, opt, f, i, n);
           if (flip < 0) im = SG.flipX(im);
           frames.push(im);
