@@ -100,8 +100,13 @@
     try {
       const img = await SG.aiGenerate(SG.aiPrompt('character', desc, $('c-style').value, $('c-view').value), seed, 512);
       setSource(SG.fromCanvasSource(img, 1024), false, `AI 生成完成（種子 ${seed}）。不滿意可按 🎲 換種子，或調整去背容差。`);
-      if (ch.base && ch.base.w > ch.base.h * 2.5) status('c-status', 'AI 伺服器可能回傳了「忙碌中」提示圖，請稍後再試或填入免費 API Key。', 'err');
-    } catch (e) { status('c-status', e.message, 'err'); }
+    } catch (e) {
+      if (e.limit) {
+        const r = SG.proceduralCharacter(desc, seed);
+        setSource(r.img, true, '');
+        status('c-status', `⚠ ${e.message}。已自動改用「程序生成」產生角色。想繼續用 AI：到 enter.pollinations.ai 免費申請 API Key 貼到上方欄位，或稍後再試。`, 'err');
+      } else status('c-status', e.message, 'err');
+    }
     btn.disabled = false;
   };
 
@@ -244,7 +249,7 @@
       const st = $('t-style').value; const s = num('t-seed');
       const [a, b] = await Promise.all([SG.aiGenerate(SG.aiPrompt('texture', ud, st), s, 512), SG.aiGenerate(SG.aiPrompt('texture', ld, st), s + 1, 512)]);
       tiles.upperImg = SG.fromCanvasSource(a, 512); tiles.lowerImg = SG.fromCanvasSource(b, 512); buildTiles(); status('t-status', 'AI 材質完成，已套用到圖塊。');
-    } catch (e) { status('t-status', e.message, 'err'); }
+    } catch (e) { status('t-status', e.limit ? `⚠ ${e.message}。目前保留程序材質；可到 enter.pollinations.ai 免費申請 API Key 後再試。` : e.message, 'err'); }
     btn.disabled = false;
   };
   async function exportTiles(what) {

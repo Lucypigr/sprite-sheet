@@ -18,6 +18,19 @@
     iso: { name: '等角 Isometric', p: 'isometric view, full body' },
   };
 
+  SG.AiLimitError = class extends Error { constructor(m) { super(m); this.limit = true; } };
+
+  // 偵測「Free limit reached」之類的提示卡片：大面積單一飽和色 + 少量文字
+  function looksLikeNotice(img) {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64; const x = c.getContext('2d'); x.drawImage(img, 0, 0, 64, 64);
+    const d = x.getImageData(0, 0, 64, 64).data; const cnt = new Map();
+    for (let i = 0; i < d.length; i += 4) { const k = ((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4); cnt.set(k, (cnt.get(k) || 0) + 1); }
+    let bk = 0, bv = 0; for (const [k, v] of cnt) if (v > bv) { bv = v; bk = k; }
+    const r = (bk >> 8) * 16 + 8, g = ((bk >> 4) & 15) * 16 + 8, b = (bk & 15) * 16 + 8;
+    const sat = Math.max(r, g, b) - Math.min(r, g, b);
+    return bv / 4096 > 0.55 && sat > 60;
+  }
+
   SG.aiPrompt = function (kind, desc, style, view) {
     const st = (SG.STYLES[style] || SG.STYLES.snes).p;
     if (kind === 'character') {
@@ -29,7 +42,7 @@
     return `${desc}, ${st}`;
   };
 
-  SG.aiGenerate = function (prompt, seed, size) {
+  SG.aiGenerate = async function (prompt, seed, size) {
     size = size || 512;
     let key = ''; try { key = localStorage.getItem('pf-pollinations-key') || ''; } catch (e) {}
     const q = `width=${size}&height=${size}&seed=${seed}&nologo=true&model=flux&enhance=false`;
@@ -37,12 +50,18 @@
     const url = key
       ? `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}?${q}&key=${encodeURIComponent(key)}`
       : `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?${q}`;
-    return new Promise((resolve, reject) => {
-      const img = new Image(); img.crossOrigin = 'anonymous';
-      const timer = setTimeout(() => reject(new Error('逾時，AI 伺服器忙碌中，請稍後再試')), 120000);
-      img.onload = () => { clearTimeout(timer); resolve(img); };
-      img.onerror = () => { clearTimeout(timer); reject(new Error('AI 生成失敗（可能是網路或伺服器限流），請稍後再試或換一個種子')); };
-      img.src = url;
-    });
+    const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 120000);
+    let res;
+    try { res = await fetch(url, { signal: ctrl.signal }); }
+    catch (e) { clearTimeout(timer); throw new Error(e.name === 'AbortError' ? '逾時：AI 伺服器忙碌中，請稍後再試' : 'AI 連線失敗，請檢查網路後再試'); }
+    clearTimeout(timer);
+    const ct = res.headers.get('content-type') || '';
+    if (res.status === 401 || res.status === 403) throw new SG.AiLimitError('API Key 無效，請確認後重新貼上（或清空改用免費匿名模式）');
+    if (res.status === 402 || res.status === 429 || res.headers.get('payment-required') || res.headers.get('retry-after')) throw new SG.AiLimitError('Pollinations 免費匿名額度已用完');
+    if (!res.ok || !ct.startsWith('image/')) throw new Error(`AI 生成失敗（HTTP ${res.status}），請稍後再試`);
+    const blob = await res.blob(); const src = URL.createObjectURL(blob);
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error('AI 回傳的圖片無法讀取')); i.src = src; });
+    if (looksLikeNotice(img)) throw new SG.AiLimitError('Pollinations 免費匿名額度已用完（伺服器回傳了提示卡片而不是圖片）');
+    return img;
   };
 })();
