@@ -199,24 +199,29 @@
   };
 
   // k-means（OKLab）自動萃取調色盤
-  SG.extractPalette = function (im, k, seed) {
-    const pts = []; const d = im.d;
-    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 127) pts.push([d[i], d[i + 1], d[i + 2]]);
-    if (!pts.length) return [[0, 0, 0]];
-    const r = SG.rng(seed || 7);
-    let sample = pts; if (pts.length > 6000) { sample = []; for (let i = 0; i < 6000; i++) sample.push(pts[Math.floor(r() * pts.length)]); }
+  SG.extractPalette = function (im, k, seed, balanced) {
+    const d = im.d; const r = SG.rng(seed || 7);
+    // 以 5-bit 色桶彙整；balanced 模式權重取 sqrt(數量)，避免大面積顏色吃掉小而重要的顏色（眼睛、飾品）
+    const buckets = new Map();
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] <= 127) continue; const key = ((d[i] >> 3) << 10) | ((d[i + 1] >> 3) << 5) | (d[i + 2] >> 3);
+      let b = buckets.get(key); if (!b) { b = [0, 0, 0, 0]; buckets.set(key, b); } b[0] += d[i]; b[1] += d[i + 1]; b[2] += d[i + 2]; b[3]++;
+    }
+    if (!buckets.size) return [[0, 0, 0]];
+    const sample = [], wts = [];
+    for (const b of buckets.values()) { sample.push([b[0] / b[3], b[1] / b[3], b[2] / b[3]]); wts.push(balanced ? Math.sqrt(b[3]) : b[3]); }
     const L = sample.map((p) => SG.oklab(p[0], p[1], p[2]));
-    const cent = [L[Math.floor(r() * L.length)]];
+    let first = 0; for (let i = 1; i < wts.length; i++) if (wts[i] > wts[first]) first = i; const cent = [L[first]];
     const dist = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
-    while (cent.length < Math.min(k, L.length)) { // k-means++
-      const ds = L.map((p) => Math.min(...cent.map((c) => dist(p, c)))); const tot = ds.reduce((a, b) => a + b, 0);
+    while (cent.length < Math.min(k, L.length)) { // k-means++（加權）
+      const ds = L.map((p, i) => Math.min(...cent.map((c) => dist(p, c))) * wts[i]); const tot = ds.reduce((a, b) => a + b, 0);
       if (tot <= 0) break; let t = r() * tot, j = 0; while (t > ds[j] && j < ds.length - 1) { t -= ds[j]; j++; } cent.push(L[j]);
     }
     const asg = new Int32Array(L.length);
     for (let it = 0; it < 12; it++) {
       for (let i = 0; i < L.length; i++) { let best = 0, bd = 1e9; for (let c = 0; c < cent.length; c++) { const v = dist(L[i], cent[c]); if (v < bd) { bd = v; best = c; } } asg[i] = best; }
       const acc = cent.map(() => [0, 0, 0, 0]);
-      for (let i = 0; i < L.length; i++) { const a = acc[asg[i]]; const p = sample[i]; a[0] += p[0]; a[1] += p[1]; a[2] += p[2]; a[3]++; }
+      for (let i = 0; i < L.length; i++) { const a = acc[asg[i]]; const p = sample[i]; const w = wts[i]; a[0] += p[0] * w; a[1] += p[1] * w; a[2] += p[2] * w; a[3] += w; }
       for (let c = 0; c < cent.length; c++) if (acc[c][3]) { const a = acc[c]; cent[c] = SG.oklab(a[0] / a[3], a[1] / a[3], a[2] / a[3]); cent[c].rgb = [a[0] / a[3], a[1] / a[3], a[2] / a[3]]; }
     }
     return cent.filter((c) => c.rgb).map((c) => c.rgb.map(Math.round));

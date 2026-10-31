@@ -30,6 +30,7 @@
       </div>
       <div data-show="upload">
         <label class="drop" id="c-drop"><input type="file" id="c-file" accept="image/*"><span>拖放或點擊上傳角色圖片<br><small>PNG（透明背景最佳）/ JPG，任意大小</small></span></label>
+        <p class="hint">💡 效果最好的圖：<b>全身、側面站姿、單色背景</b>（或透明 PNG）。動作誇張的姿勢（大跨步、揮劍中）做走路動畫會不自然。</p>
       </div>
       <div data-show="ai proc">
         <label>描述<textarea id="c-desc" rows="3" placeholder="例：紅髮的女騎士，拿著劍與盾，藍色盔甲">紅髮的女騎士，拿著劍與盾，藍色盔甲</textarea></label>
@@ -51,9 +52,13 @@
     </details>
 
     <details open><summary>② 像素化</summary>
-      <label>角色高度（像素）<span class="val" id="c-height-v"></span><input type="range" id="c-height" min="12" max="128" value="32"></label>
+      <label>角色高度（像素）<span class="val" id="c-height-v"></span><input type="range" id="c-height" min="12" max="128" value="48"></label>
+      <div class="row2">
+        <label>像素化方式<select id="c-method"><option value="detail">精緻（推薦）</option><option value="smooth">柔和（平均色）</option></select></label>
+        <label>細節保留<span class="val" id="c-detail-v"></span><input type="range" id="c-detail" min="0" max="100" value="50"></label>
+      </div>
       <label>調色盤<select id="c-pal"></select></label>
-      <label data-pal="auto">自動色數<span class="val" id="c-colors-v"></span><input type="range" id="c-colors" min="2" max="32" value="12"></label>
+      <label data-pal="auto">自動色數<span class="val" id="c-colors-v"></span><input type="range" id="c-colors" min="2" max="32" value="16"></label>
       <div class="row2">
         <label>飽和度<span class="val" id="c-sat-v"></span><input type="range" id="c-sat" min="50" max="200" value="115"></label>
         <label>對比<span class="val" id="c-con-v"></span><input type="range" id="c-con" min="50" max="200" value="110"></label>
@@ -65,6 +70,7 @@
         <label><input type="checkbox" id="c-blobs" checked> 只保留主體</label>
         <label><input type="checkbox" id="c-clean" checked> 清除雜點</label>
         <label><input type="checkbox" id="c-dither"> 抖動</label>
+        <label><input type="checkbox" id="c-shading"> 邊緣光影</label>
       </div>
     </details>
 
@@ -229,6 +235,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="js/core.js"></script>
+<script src="js/pixelate.js"></script>
 <script src="js/anim.js"></script>
 <script src="js/procchar.js"></script>
 <script src="js/vfx.js"></script>

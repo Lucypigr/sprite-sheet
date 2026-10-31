@@ -25,9 +25,9 @@
       }
       case 'walk': case 'run': {
         const run = name === 'run'; const s = Math.sin(ph);
-        const stride = (run ? 2 : 1.3) * A, lift = (run ? 2.2 : 1.4) * A;
-        p.L = [Math.round(s * stride) * f, Math.round(Math.max(0, s) * lift)];
-        p.R = [Math.round(-s * stride) * f, Math.round(Math.max(0, -s) * lift)];
+        const stride = (run ? 3 : 2) * A, lift = (run ? 2.5 : 1.5) * A;
+        p.L = [s * stride * f, Math.max(0, s) * lift];
+        p.R = [-s * stride * f, Math.max(0, -s) * lift];
         p.front = s > 0 ? 'L' : 'R';
         p.dy = -Math.round(Math.abs(Math.sin(ph)) * (run ? 1.5 : 0.8) * A) + (run ? 0 : 0);
         p.breathe = Math.abs(Math.cos(ph)) > 0.7 ? A * (run ? 1 : 0) : 0;
@@ -38,7 +38,7 @@
         const k = [[-0.12, -1, 0], [-0.2, -2, 0], [0.22, 2, 1], [0.28, 3, 2], [0.14, 2, 3], [0.04, 1, 0], [0, 0, 0]];
         const q = k[Math.min(k.length - 1, Math.round((i / Math.max(1, n - 1)) * (k.length - 1)))];
         p.shear = q[0] * f; p.dx = q[1] * A * f; p.fx = q[2] ? { type: 'slash', stage: q[2] } : null;
-        if (q[2] === 1) { p.sx = 1.05; p.sy = 0.96; }
+        if (q[2] === 1) { p.sx = 1.12; p.sy = 0.95; }
         break;
       }
       case 'jump': {
@@ -91,8 +91,15 @@
       let src = -1;
       if (v >= hip && (p.L[0] || p.L[1] || p.R[0] || p.R[1])) {
         const cand = [];
-        const l = get(u - p.L[0], v + p.L[1]); if (l >= 0 && ((l / 4) % w) < legCx && Math.floor(v + p.L[1]) >= hip) cand.push(['L', l]);
-        const r = get(u - p.R[0], v + p.R[1]); if (r >= 0 && ((r / 4) % w) >= legCx && Math.floor(v + p.R[1]) >= hip) cand.push(['R', r]);
+        // 腿以髖關節為支點擺動：越靠近腳，水平位移越大；抬腿時整條腿等比縮短（保留腳的形狀）
+        const legLen = h - hip;
+        const leg = (P) => {
+          const lift = Math.min(P[1], legLen * 0.6); const sv = hip + (v - hip) * legLen / (legLen - lift);
+          const k = Math.min(1, (sv - hip) / legLen); return [u - P[0] * k, sv];
+        };
+        const lp = leg(p.L), rp = leg(p.R);
+        const l = get(lp[0], lp[1]); if (l >= 0 && ((l / 4) % w) < legCx) cand.push(['L', l]);
+        const r = get(rp[0], rp[1]); if (r >= 0 && ((r / 4) % w) >= legCx) cand.push(['R', r]);
         if (cand.length === 2) src = (cand[0][0] === p.front ? cand[0] : cand[1])[1];
         else if (cand.length) src = cand[0][1];
       } else if (v < chest && p.breathe) {

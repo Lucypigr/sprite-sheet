@@ -60,7 +60,7 @@
   fillSelect('c-style', SG.STYLES, 'snes'); fillSelect('c-view', SG.VIEWS, 'side');
   fillSelect('c-pal', SG.PALETTES, 'auto');
   fillSelect('t-pal', SG.PALETTES, 'none'); fillSelect('t-style', SG.STYLES, 'snes');
-  ['c-height', 'c-colors', 'c-tol', 'c-leg'].forEach((i) => bindVal(i)); bindVal('c-sat', (v) => v + '%'); bindVal('c-con', (v) => v + '%');
+  ['c-height', 'c-colors', 'c-tol', 'c-leg'].forEach((i) => bindVal(i)); bindVal('c-detail', (v) => v + '%'); bindVal('c-sat', (v) => v + '%'); bindVal('c-con', (v) => v + '%');
   $('c-leg-v').textContent += '%';
   $('c-leg').addEventListener('input', () => { $('c-leg-v').textContent = $('c-leg').value + '%'; });
 
@@ -114,20 +114,21 @@
     if (!ch.src) return;
     try {
       let im = ch.src.img; const pixel = ch.src.pixel;
-      if (!pixel) {
-        if ($('c-bg').checked) im = SG.removeBackground(im, num('c-tol'));
-        if ($('c-blobs').checked) im = SG.keepMainBlobs(im, 0.06);
-        const b = SG.bbox(im, 100); if (!b) return status('c-status', '去背後沒有剩下內容，請降低去背容差', 'err');
-        im = SG.crop(im, b);
-        const H = num('c-height'); const W = Math.max(1, Math.round(b.w * H / b.h));
-        im = SG.downscale(im, W, H, 0.4);
-      } else { const b = SG.bbox(im, 0); if (b) im = SG.crop(im, b); }
-      im = SG.adjust(im, num('c-sat') / 100, num('c-con') / 100, 0);
       const pk = $('c-pal').value; let pal = null;
-      if (pk === 'auto') { if (!pixel) pal = SG.extractPalette(im, num('c-colors'), 3); }
-      else if (pk !== 'none') pal = SG.PALETTES[pk].colors;
-      if (pal) im = SG.quantize(im, pal, $('c-dither').checked);
-      if (!pixel && $('c-clean').checked) im = SG.cleanOrphans(im);
+      if (!pixel) {
+        const r = SG.pixelate(im, {
+          height: num('c-height'), method: $('c-method').value, colors: num('c-colors'),
+          palette: pk === 'auto' ? null : pk === 'none' ? 'none' : SG.PALETTES[pk].colors,
+          bg: $('c-bg').checked, tol: num('c-tol'), blobs: $('c-blobs').checked, sat: num('c-sat') / 100, con: num('c-con') / 100,
+          detail: num('c-detail') / 100, shading: $('c-shading').checked, clean: $('c-clean').checked, dither: $('c-dither').checked,
+        });
+        if (!r) return status('c-status', '去背後沒有剩下內容，請降低去背容差', 'err');
+        im = r.img; pal = r.palette;
+      } else {
+        const b = SG.bbox(im, 0); if (b) im = SG.crop(im, b);
+        im = SG.adjust(im, num('c-sat') / 100, num('c-con') / 100, 0);
+        if (pk !== 'auto' && pk !== 'none') { pal = SG.PALETTES[pk].colors; im = SG.quantize(im, pal, $('c-dither').checked); }
+      }
       const b2 = SG.bbox(im, 0); if (b2) im = SG.crop(im, b2);
       ch.base = im;
       SG.toCanvas(im, Math.max(1, Math.floor(120 / Math.max(im.w, im.h))), $('c-base'));
