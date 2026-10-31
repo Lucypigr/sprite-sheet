@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel Forge 像素工坊</title>
+<meta name="description" content="免費線上生成像素風 Sprite Sheet、VFX 特效與地圖圖塊，直接匯出 Godot 4 SpriteFrames / TileSet。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Silkscreen&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="logo">▦</span><div><h1>Pixel Forge</h1><small>像素工坊 · Sprite Sheet / VFX / Tileset 生成器 · Godot 4 匯出</small></div></div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="char">角色 Sprite</button>
+    <button class="tab" data-tab="vfx">VFX 特效</button>
+    <button class="tab" data-tab="tiles">地圖圖塊</button>
+    <button class="tab" data-tab="help">說明</button>
+  </nav>
+</header>
+
+<main>
+<!-- ================= 角色 ================= -->
+<section class="panel active" id="tab-char">
+  <aside class="side">
+    <details open><summary>① 角色來源</summary>
+      <div class="seg" id="c-src">
+        <button data-v="upload" class="on">上傳圖片</button><button data-v="ai">AI 生成</button><button data-v="proc">程序生成</button>
+      </div>
+      <div data-show="upload">
+        <label class="drop" id="c-drop"><input type="file" id="c-file" accept="image/*"><span>拖放或點擊上傳角色圖片<br><small>PNG（透明背景最佳）/ JPG，任意大小</small></span></label>
+      </div>
+      <div data-show="ai proc">
+        <label>描述<textarea id="c-desc" rows="3" placeholder="例：紅髮的女騎士，拿著劍與盾，藍色盔甲">紅髮的女騎士，拿著劍與盾，藍色盔甲</textarea></label>
+      </div>
+      <div data-show="ai">
+        <div class="row2">
+          <label>風格<select id="c-style"></select></label>
+          <label>視角<select id="c-view"></select></label>
+        </div>
+        <p class="hint">使用免費的 <a href="https://pollinations.ai" target="_blank" rel="noopener">Pollinations.ai</a>，不需帳號即可使用。生成後會自動去背、像素化並套用調色盤。</p>
+        <label>Pollinations API Key（選填，免費申請可減少限流與浮水印）<input type="password" id="ai-key" placeholder="可留空" autocomplete="off"></label>
+      </div>
+      <div data-show="proc"><p class="hint">離線生成，可解析描述中的關鍵字：騎士 / 法師 / 盜賊 / 弓箭手 / 史萊姆 / 怪物 / 骷髏、紅髮、長髮、劍、盾、杖、斗篷、顏色＋部位…</p></div>
+      <div data-show="ai proc" class="row2">
+        <label>種子<input type="number" id="c-seed" value="1234"></label>
+        <div class="btns"><button class="ghost" id="c-dice" title="隨機種子">🎲</button><button class="primary" id="c-gen">生成</button></div>
+      </div>
+    </details>
+
+    <details open><summary>② 像素化</summary>
+      <label>角色高度（像素）<span class="val" id="c-height-v"></span><input type="range" id="c-height" min="12" max="128" value="32"></label>
+      <label>調色盤<select id="c-pal"></select></label>
+      <label data-pal="auto">自動色數<span class="val" id="c-colors-v"></span><input type="range" id="c-colors" min="2" max="32" value="12"></label>
+      <div class="row2">
+        <label>飽和度<span class="val" id="c-sat-v"></span><input type="range" id="c-sat" min="50" max="200" value="115"></label>
+        <label>對比<span class="val" id="c-con-v"></span><input type="range" id="c-con" min="50" max="200" value="110"></label>
+      </div>
+      <label>去背容差<span class="val" id="c-tol-v"></span><input type="range" id="c-tol" min="0" max="100" value="30"></label>
+      <label>外框<select id="c-outline"><option value="dark">深色外框</option><option value="shade">自動陰影外框</option><option value="none">無</option></select></label>
+      <div class="checks">
+        <label><input type="checkbox" id="c-bg" checked> 自動去背</label>
+        <label><input type="checkbox" id="c-blobs" checked> 只保留主體</label>
+        <label><input type="checkbox" id="c-clean" checked> 清除雜點</label>
+        <label><input type="checkbox" id="c-dither"> 抖動</label>
+      </div>
+    </details>
+
+    <details open><summary>③ 動畫</summary>
+      <div id="c-anims" class="animlist"></div>
+      <div class="row2">
+        <label>原圖朝向<select id="c-facing"><option value="right">向右</option><option value="left">向左</option></select></label>
+        <label>特效顏色<input type="color" id="c-accent" value="#ffe14d"></label>
+      </div>
+      <label>腿部起點（身高 %）<span class="val" id="c-leg-v"></span><input type="range" id="c-leg" min="40" max="85" value="64"></label>
+      <div class="row2">
+        <label>格子寬<input type="number" id="c-cw" placeholder="自動" min="8" max="512"></label>
+        <label>格子高<input type="number" id="c-ch" placeholder="自動" min="8" max="512"></label>
+      </div>
+      <div class="checks"><label><input type="checkbox" id="c-mirror" checked> 同時輸出左右兩向（鏡像）</label></div>
+    </details>
+
+    <details open><summary>④ 匯出 Godot</summary>
+      <div class="row2">
+        <label>檔名<input type="text" id="c-name" value="hero"></label>
+        <label>輸出倍率<select id="c-scale"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+      </div>
+      <div class="btns col">
+        <button class="primary" id="c-zip">⬇ 下載 ZIP（PNG + .tres + .json）</button>
+        <div class="btns"><button id="c-png">PNG</button><button id="c-tres">.tres</button><button id="c-json">.json</button></div>
+      </div>
+    </details>
+  </aside>
+  <div class="stage">
+    <div class="card">
+      <div class="card-h"><h2>動畫預覽</h2><div class="tools"><select id="c-play-anim"></select><button id="c-play" class="ghost">⏸</button><div class="bgsel" data-target="c-preview"></div></div></div>
+      <div class="preview-wrap"><canvas id="c-preview" class="pix bg-checker"></canvas>
+        <div class="srcbox"><div><small>原圖</small><canvas id="c-orig" class="bg-checker"></canvas></div><div><small>像素化</small><canvas id="c-base" class="pix bg-checker"></canvas></div></div>
+      </div>
+      <div class="status" id="c-status">請上傳圖片或生成角色。</div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Sprite Sheet</h2><div class="tools"><span class="meta" id="c-meta"></span><label class="zoom">縮放<input type="range" id="c-zoom" min="1" max="8" value="3"></label></div></div>
+      <div class="sheet-wrap"><canvas id="c-sheet" class="pix bg-checker"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= VFX ================= -->
+<section class="panel" id="tab-vfx">
+  <aside class="side">
+    <details open><summary>① 特效類型</summary>
+      <div id="v-types" class="typegrid"></div>
+    </details>
+    <details open><summary>② 參數</summary>
+      <div class="row2">
+        <label>尺寸<select id="v-size"><option>16</option><option>24</option><option selected>32</option><option>48</option><option>64</option><option>96</option><option>128</option></select></label>
+        <label>影格數<input type="number" id="v-frames" min="2" max="32" value="10"></label>
+      </div>
+      <div class="row2">
+        <label>FPS<input type="number" id="v-fps" min="1" max="60" value="12"></label>
+        <label>種子<input type="number" id="v-seed" value="7"></label>
+      </div>
+      <label>配色<select id="v-ramp"></select></label>
+      <div class="ramp" id="v-ramp-view"></div>
+      <label>大小<span class="val" id="v-scale-v"></span><input type="range" id="v-scale" min="40" max="130" value="100"></label>
+      <label>粒子密度<span class="val" id="v-dens-v"></span><input type="range" id="v-dens" min="0" max="100" value="50"></label>
+      <label>亮度曲線<span class="val" id="v-gamma-v"></span><input type="range" id="v-gamma" min="50" max="200" value="100"></label>
+      <div class="checks">
+        <label><input type="checkbox" id="v-dither" checked> 像素抖動</label>
+        <label><input type="checkbox" id="v-outline"> 深色外框</label>
+        <label><input type="checkbox" id="v-flat"> 2.5D 地面透視（壓扁）</label>
+      </div>
+      <div class="btns"><button class="ghost" id="v-dice">🎲 隨機</button></div>
+    </details>
+    <details open><summary>③ 匯出 Godot</summary>
+      <div class="row2"><label>檔名<input type="text" id="v-name" value="vfx_explosion"></label><label>輸出倍率<select id="v-scale-out"><option>1</option><option>2</option><option>3</option><option>4</option></select></label></div>
+      <div class="btns col"><button class="primary" id="v-zip">⬇ 下載 ZIP（PNG + .tres + .json）</button><div class="btns"><button id="v-png">PNG</button><button id="v-tres">.tres</button></div></div>
+    </details>
+  </aside>
+  <div class="stage">
+    <div class="card">
+      <div class="card-h"><h2>特效預覽</h2><div class="tools"><button id="v-play" class="ghost">⏸</button><div class="bgsel" data-target="v-preview"></div></div></div>
+      <div class="preview-wrap"><canvas id="v-preview" class="pix bg-dark"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Sprite Sheet</h2><div class="tools"><span class="meta" id="v-meta"></span><label class="zoom">縮放<input type="range" id="v-zoom" min="1" max="8" value="3"></label></div></div>
+      <div class="sheet-wrap"><canvas id="v-sheet" class="pix bg-dark"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 圖塊 ================= -->
+<section class="panel" id="tab-tiles">
+  <aside class="side">
+    <details open><summary>① 地形</summary>
+      <div class="row2"><label>上層地形<select id="t-upper"></select></label><label>下層地形<select id="t-lower"></select></label></div>
+      <div class="seg" id="t-src"><button data-v="proc" class="on">程序材質</button><button data-v="ai">AI 材質</button></div>
+      <div data-show="ai">
+        <label>上層材質描述<input type="text" id="t-upper-desc" placeholder="例：lush green grass with tiny flowers"></label>
+        <label>下層材質描述<input type="text" id="t-lower-desc" placeholder="例：dry cracked dirt path"></label>
+        <label>風格<select id="t-style"></select></label>
+        <div class="btns"><button class="primary" id="t-aigen">AI 生成材質</button></div>
+        <p class="hint">AI 材質會自動縮小、無縫化並套用調色盤，再接上自動拼接邊緣。</p>
+      </div>
+      <label>種子<input type="number" id="t-seed" value="42"></label>
+    </details>
+    <details open><summary>② 圖塊設定</summary>
+      <div class="seg" id="t-mode"><button data-v="2d" class="on">2D 俯視（正方形）</button><button data-v="iso">2.5D 等角</button></div>
+      <div class="row2">
+        <label>圖塊尺寸<select id="t-size"><option>8</option><option selected>16</option><option>24</option><option>32</option><option>48</option><option>64</option></select></label>
+        <label>變化款數量<input type="number" id="t-var" min="0" max="8" value="4"></label>
+      </div>
+      <label data-mode="iso">方塊厚度<span class="val" id="t-depth-v"></span><input type="range" id="t-depth" min="0" max="32" value="8"></label>
+      <label>邊緣粗糙度<span class="val" id="t-rough-v"></span><input type="range" id="t-rough" min="0" max="90" value="45"></label>
+      <label>調色盤<select id="t-pal"></select></label>
+      <div class="checks">
+        <label><input type="checkbox" id="t-border" checked> 邊緣描邊</label>
+        <label><input type="checkbox" id="t-shadow" checked> 落差陰影</label>
+      </div>
+    </details>
+    <details open><summary>③ 匯出 Godot</summary>
+      <div class="row2"><label>檔名<input type="text" id="t-name" value="tiles_grass_dirt"></label><label>輸出倍率<select id="t-scale-out"><option>1</option><option>2</option><option>3</option><option>4</option></select></label></div>
+      <div class="btns col"><button class="primary" id="t-zip">⬇ 下載 ZIP（PNG + TileSet .tres）</button><div class="btns"><button id="t-png">PNG</button><button id="t-tres">.tres</button><button id="t-mapdl">預覽地圖 PNG</button></div></div>
+    </details>
+  </aside>
+  <div class="stage">
+    <div class="card">
+      <div class="card-h"><h2>地圖預覽（自動拼接測試）</h2><div class="tools"><button class="ghost" id="t-remap">🎲 換地圖</button><label class="zoom">縮放<input type="range" id="t-mapzoom" min="1" max="6" value="2"></label></div></div>
+      <div class="sheet-wrap"><canvas id="t-map" class="pix bg-dark"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Tileset</h2><div class="tools"><span class="meta" id="t-meta"></span><label class="zoom">縮放<input type="range" id="t-zoom" min="1" max="8" value="4"></label></div></div>
+      <div class="sheet-wrap"><canvas id="t-sheet" class="pix bg-checker"></canvas></div>
+      <div class="status" id="t-status"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 說明 ================= -->
+<section class="panel" id="tab-help">
+  <div class="help card">
+    <h2>如何使用</h2>
+    <h3>角色 Sprite Sheet</h3>
+    <ol>
+      <li><b>上傳圖片</b>：任何角色圖（手繪、AI 圖、3D 截圖都可以），會自動去背 → 裁切 → 縮成指定像素高度 → 套用調色盤 → 加外框。</li>
+      <li><b>AI 生成</b>：輸入描述（中英文皆可），透過免費的 Pollinations.ai 生成角色，再自動像素化。</li>
+      <li><b>程序生成</b>：完全離線，依描述關鍵字組合出像素小人 / 史萊姆 / 怪物。</li>
+      <li>勾選要的動畫（待機、走路、跑步、攻擊、跳躍、受傷、死亡、施法），調整每個動畫的影格數與 FPS。動畫是以像素級變形（呼吸、雙腿分離擺動、傾斜、擠壓伸展、旋轉、閃白）自動產生的。</li>
+      <li>下載 ZIP：包含 <code>PNG</code>、Godot 4 的 <code>SpriteFrames .tres</code>、Aseprite 相容 <code>.json</code>。</li>
+    </ol>
+    <h3>VFX 特效</h3>
+    <p>16 種程序生成特效（爆炸、火焰、斬擊、魔法陣、閃電、治療、冰刺、傳送門、衝擊波…），可調尺寸、影格、配色、密度，循環特效保證首尾無縫。開啟「2.5D 地面透視」可得到貼地的橢圓魔法陣 / 衝擊波。</p>
+    <h3>地圖圖塊</h3>
+    <p>選擇上下兩層地形，產生 16 張角落自動拼接圖塊 + 隨機變化款。匯出的 TileSet 已設定好 <b>Terrain（Match Corners）</b>，在 Godot 的 TileMapLayer 直接用地形筆刷畫即可。支援 2D 正方形與 2.5D 等角（含方塊厚度）。</p>
+    <h3>Godot 4 設定</h3>
+    <ul>
+      <li>專案設定 → Rendering → Textures → Default Texture Filter 改為 <b>Nearest</b>，像素才不會糊。</li>
+      <li>把 ZIP 解壓到專案根目錄（res://）；若放子資料夾，請在 .tres 內修改 <code>res://</code> 路徑。</li>
+      <li>角色：AnimatedSprite2D → Sprite Frames → 載入 .tres，<code>$AnimatedSprite2D.play("walk_right")</code>。</li>
+      <li>圖塊：TileMapLayer → Tile Set → 載入 .tres → Terrains 分頁畫圖。</li>
+    </ul>
+    <p class="hint">所有處理都在瀏覽器本機完成，圖片不會上傳（AI 生成功能除外，只會送出文字描述）。</p>
+  </div>
+</section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="js/core.js"></script>
+<script src="js/anim.js"></script>
+<script src="js/procchar.js"></script>
+<script src="js/vfx.js"></script>
+<script src="js/tiles.js"></script>
+<script src="js/export.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
